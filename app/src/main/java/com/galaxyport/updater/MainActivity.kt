@@ -1,11 +1,16 @@
 package com.galaxyport.updater
 
 import android.app.DownloadManager
+import android.content.BroadcastReceiver
 import android.content.Context
+import android.content.Intent
+import android.content.IntentFilter
 import android.net.Uri
 import android.os.Bundle
 import android.os.Environment
+import android.view.View
 import android.widget.Button
+import android.widget.ProgressBar
 import android.widget.TextView
 import androidx.appcompat.app.AppCompatActivity
 import org.json.JSONObject
@@ -16,73 +21,203 @@ import java.net.URL
 
 class MainActivity : AppCompatActivity() {
 
+    // === CONFIGURATION ===
+    // Update with your raw GitHub URL
     private val otaUrl = "https://raw.githubusercontent.com/MerPen44/GalaxyPort-OTA/main/ota.json"
+    
+    // === STATE VARIABLES ===
     private var downloadUrl: String? = null
-    private var latestVersion: String = ""
+    private var downloadId: Long = -1L
+    private var newVersionName: String = ""
+    private var installedVersionName: String = "0.5"
+    private var installedVersionCode: Int = 5
 
-    private fun getProp(key: String, defaultVal: String): String {
-        return try {
-            val p = Runtime.getRuntime().exec(arrayOf("getprop", key))
-            val out = BufferedReader(InputStreamReader(p.inputStream)).readLine()?.trim()
-            if (out.isNullOrEmpty()) defaultVal else out
-        } catch (_: Exception) {
-            defaultVal
-        }
+    // === UI HOOKS ===
+    private lateinit var tvHeaderTitle: TextView
+    private lateinit var tvCurrentVersion: TextView
+    private lateinit var tvStatusTitle: TextView
+    private lateinit var tvChangelog: TextView
+    private lateinit var btnAction: Button
+    private lateinit var progressBar: ProgressBar
+    private lateinit var cardChangelog: View
+
+    enum class State {
+        IDLE,
+        CHECKING,
+        UP_TO_DATE,
+        UPDATE_AVAILABLE,
+        DOWNLOADING,
+        DOWNLOAD_COMPLETE,
+        ERROR
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_main)
 
-        val tvCurrent = findViewById<TextView>(R.id.tvCurrentVersion)
-        val tvStatus = findViewById<TextView>(R.id.tvStatus)
-        val btnCheck = findViewById<Button>(R.id.btnCheck)
-        val btnDownload = findViewById<Button>(R.id.btnDownload)
+        initViews()
+        loadSystemProperties()
+        updateUIState(State.IDLE)
 
-        val installedVer = getProp("ro.galaxyport.version", "0.5")
-        val installedCode = getProp("ro.galaxyport.version_code", "5").toIntOrNull() ?: 5
-        tvCurrent.text = "Installed: GalaxyPort v$installedVer (code $installedCode)"
-
-        btnCheck.setOnClickListener {
-            tvStatus.text = "Checking for updates..."
-            btnDownload.isEnabled = false
-            Thread {
-                try {
-                    val conn = URL(otaUrl).openConnection() as HttpURLConnection
-                    conn.connectTimeout = 10000
-                    conn.readTimeout = 10000
-                    val text = conn.inputStream.bufferedReader().readText()
-                    val json = JSONObject(text)
-                    val remoteCode = json.getInt("versionCode")
-                    latestVersion = json.getString("version")
-                    val changelog = json.optString("changelog", "")
-                    val url = json.getString("url")
-
-                    runOnUiThread {
-                        if (remoteCode > installedCode) {
-                            downloadUrl = url
-                            btnDownload.isEnabled = true
-                            tvStatus.text = "Update available: v$latestVersion\n\nChangelog:\n$changelog"
-                        } else {
-                            tvStatus.text = "You are on the latest version (v$installedVer)."
-                        }
-                    }
-                } catch (e: Exception) {
-                    runOnUiThread { tvStatus.text = "Check failed: ${e.message}" }
-                }
-            }.start()
+        btnAction.setOnClickListener {
+            when (btnAction.tag) {
+                "CHECK" -> checkForUpdates()
+                "DOWNLOAD" -> startDownload()
+                "REBOOT" -> tvStatusTitle.text = "Reboot to recovery and flash the zip from your Downloads folder."
+            }
         }
 
-        btnDownload.setOnClickListener {
-            val url = downloadUrl ?: return@setOnClickListener
-            val req = DownloadManager.Request(Uri.parse(url))
-                .setTitle("GalaxyPort v$latestVersion")
-                .setDescription("Downloading ROM update...")
-                .setNotificationVisibility(DownloadManager.Request.VISIBILITY_VISIBLE_NOTIFY_COMPLETED)
-                .setDestinationInExternalPublicDir(Environment.DIRECTORY_DOWNLOADS, "GalaxyPort-v$latestVersion.zip")
-            val dm = getSystemService(Context.DOWNLOAD_SERVICE) as DownloadManager
-            dm.enqueue(req)
-            tvStatus.text = "Downloading to Downloads/GalaxyPort-v$latestVersion.zip...\nWhen done, reboot to Recovery and flash it (no data wipe needed!)."
+        // Register download completion receiver
+        registerReceiver(
+            onDownloadComplete,
+            IntentFilter(DownloadManager.ACTION_DOWNLOAD_COMPLETE),
+            Context.RECEIVER_EXPORTED
+        )
+    }
+
+    override fun onDestroy() {
+        super.onDestroy()
+        try {
+            unregisterReceiver(onDownloadComplete)
+        } catch (_: Exception) {}
+    }
+
+    private fun initViews() {
+        tvHeaderTitle = findViewById(R.id.tvHeaderTitle)
+        tvCurrentVersion = findViewById(R.id.tvCurrentVersion)
+        tvStatusTitle = findViewById(R.id.tvStatusTitle)
+        tvChangelog = findViewById(R.id.tvChangelog)
+        btnAction = findViewById(R.id.btnAction)
+        progressBar = findViewById(R.id.progressBar)
+        cardChangelog = findViewById(R.id.cardChangelog)
+    }
+
+    private fun loadSystemProperties() {
+        installedVersionName = getSystemProp("ro.galaxyport.version", "0.5")
+        installedVersionCode = getSystemProp("ro.galaxyport.version_code", "5").toIntOrNull() ?: 5
+        tvCurrentVersion.text = "One UI 8.0 • GalaxyPort v$installedVersionName"
+    }
+
+    private fun checkForUpdates() {
+        updateUIState(State.CHECKING)
+
+        Thread {
+            try {
+                val conn = URL(otaUrl).openConnection() as HttpURLConnection
+                conn.connectTimeout = 8000
+                conn.readTimeout = 8000
+                val text = conn.inputStream.bufferedReader().use { it.readText() }
+                val json = JSONObject(text)
+
+                val remoteCode = json.getInt("versionCode")
+                newVersionName = json.getString("version")
+                val changelog = json.optString("changelog", "No changelog provided.")
+                downloadUrl = json.getString("url")
+
+                runOnUiThread {
+                    if (remoteCode > installedVersionCode) {
+                        tvChangelog.text = changelog
+                        updateUIState(State.UPDATE_AVAILABLE)
+                    } else {
+                        updateUIState(State.UP_TO_DATE)
+                    }
+                }
+            } catch (e: Exception) {
+                runOnUiThread {
+                    tvStatusTitle.text = "Failed to connect: ${e.localizedMessage}"
+                    updateUIState(State.ERROR)
+                }
+            }
+        }.start()
+    }
+
+    private fun startDownload() {
+        val url = downloadUrl ?: return
+        updateUIState(State.DOWNLOADING)
+
+        val request = DownloadManager.Request(Uri.parse(url))
+            .setTitle("GalaxyPort v$newVersionName")
+            .setDescription("Downloading update zip...")
+            .setNotificationVisibility(DownloadManager.Request.VISIBILITY_VISIBLE_NOTIFY_COMPLETED)
+            .setDestinationInExternalPublicDir(
+                Environment.DIRECTORY_DOWNLOADS,
+                "GalaxyPort-v$newVersionName.zip"
+            )
+
+        val dm = getSystemService(Context.DOWNLOAD_SERVICE) as DownloadManager
+        downloadId = dm.enqueue(request)
+    }
+
+    private val onDownloadComplete = object : BroadcastReceiver() {
+        override fun onReceive(context: Context?, intent: Intent?) {
+            val id = intent?.getLongExtra(DownloadManager.EXTRA_DOWNLOAD_ID, -1)
+            if (id == downloadId) {
+                runOnUiThread {
+                    updateUIState(State.DOWNLOAD_COMPLETE)
+                }
+            }
+        }
+    }
+
+    // === UI STATE MACHINE (Easy for you to customize) ===
+    private fun updateUIState(state: State) {
+        when (state) {
+            State.IDLE -> {
+                progressBar.visibility = View.GONE
+                cardChangelog.visibility = View.GONE
+                tvStatusTitle.text = "Check for new system updates"
+                btnAction.text = "Check for update"
+                btnAction.tag = "CHECK"
+                btnAction.isEnabled = true
+            }
+            State.CHECKING -> {
+                progressBar.visibility = View.VISIBLE
+                tvStatusTitle.text = "Checking for update..."
+                btnAction.isEnabled = false
+            }
+            State.UP_TO_DATE -> {
+                progressBar.visibility = View.GONE
+                cardChangelog.visibility = View.GONE
+                tvStatusTitle.text = "Your software is up to date."
+                btnAction.text = "Check again"
+                btnAction.tag = "CHECK"
+                btnAction.isEnabled = true
+            }
+            State.UPDATE_AVAILABLE -> {
+                progressBar.visibility = View.GONE
+                cardChangelog.visibility = View.VISIBLE
+                tvStatusTitle.text = "GalaxyPort v$newVersionName is available!"
+                btnAction.text = "Download"
+                btnAction.tag = "DOWNLOAD"
+                btnAction.isEnabled = true
+            }
+            State.DOWNLOADING -> {
+                progressBar.visibility = View.VISIBLE
+                tvStatusTitle.text = "Downloading to Downloads folder..."
+                btnAction.isEnabled = false
+            }
+            State.DOWNLOAD_COMPLETE -> {
+                progressBar.visibility = View.GONE
+                tvStatusTitle.text = "Download complete!\nReboot to recovery to install."
+                btnAction.text = "Instructions"
+                btnAction.tag = "REBOOT"
+                btnAction.isEnabled = true
+            }
+            State.ERROR -> {
+                progressBar.visibility = View.GONE
+                btnAction.text = "Retry"
+                btnAction.tag = "CHECK"
+                btnAction.isEnabled = true
+            }
+        }
+    }
+
+    private fun getSystemProp(key: String, def: String): String {
+        return try {
+            val proc = Runtime.getRuntime().exec(arrayOf("getprop", key))
+            BufferedReader(InputStreamReader(proc.inputStream)).readLine()?.trim() ?: def
+        } catch (_: Exception) {
+            def
         }
     }
 }
