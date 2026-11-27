@@ -1,137 +1,156 @@
-<?xml version="1.0" encoding="utf-8"?>
-<androidx.coordinatorlayout.widget.CoordinatorLayout
-    xmlns:android="http://schemas.android.com/apk/res/android"
-    xmlns:app="http://schemas.android.com/apk/res-auto"
-    android:layout_width="match_parent"
-    android:layout_height="match_parent"
-    android:background="?android:attr/colorBackground">
+package com.galaxyport.updater
 
-    <LinearLayout
-        android:layout_width="match_parent"
-        android:layout_height="match_parent"
-        android:orientation="vertical"
-        android:padding="20dp">
+import android.app.DownloadManager
+import android.content.BroadcastReceiver
+import android.content.Context
+import android.content.Intent
+import android.content.IntentFilter
+import android.net.Uri
+import android.os.Bundle
+import android.os.Environment
+import android.view.View
+import android.widget.Button
+import android.widget.ProgressBar
+import android.widget.TextView
+import androidx.appcompat.app.AppCompatActivity
+import androidx.core.content.ContextCompat
+import org.json.JSONObject
+import java.io.BufferedReader
+import java.io.InputStreamReader
+import java.net.HttpURLConnection
+import java.net.URL
 
-        <!-- Top Header: One UI Large Title -->
-        <LinearLayout
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:orientation="vertical"
-            android:paddingTop="36dp"
-            android:paddingBottom="24dp">
+class MainActivity : AppCompatActivity() {
 
-            <TextView
-                android:id="@+id/tvHeaderTitle"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:text="Software update"
-                android:textSize="32sp"
-                android:textStyle="bold"
-                android:textColor="?android:attr/textColorPrimary" />
+    private val otaUrl = "https://raw.githubusercontent.com/YOUR_USERNAME/GalaxyPort-OTA/main/ota.json"
+    private var downloadUrl: String? = null
+    private var newVersionName: String = ""
 
-            <TextView
-                android:id="@+id/tvCurrentVersion"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="4dp"
-                android:text="One UI 8.0 • GalaxyPort"
-                android:textSize="15sp"
-                android:textColor="?android:attr/textColorSecondary" />
-        </LinearLayout>
+    private lateinit var tvCurrentVersion: TextView
+    private lateinit var tvStatusTitle: TextView
+    private lateinit var tvChangelog: TextView
+    private lateinit var btnAction: Button
+    private lateinit var progressBar: ProgressBar
+    private lateinit var cardChangelog: View
 
-        <!-- Main Card: Status Container -->
-        <com.google.android.material.card.MaterialCardView
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            app:cardCornerRadius="24dp"
-            app:cardElevation="0dp"
-            app:strokeWidth="1dp"
-            app:strokeColor="#1F888888"
-            android:layout_marginBottom="16dp">
+    enum class State { IDLE, CHECKING, UP_TO_DATE, UPDATE_AVAILABLE, DOWNLOADING, DOWNLOAD_COMPLETE, ERROR }
 
-            <LinearLayout
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:orientation="vertical"
-                android:padding="20dp">
+    override fun onCreate(savedInstanceState: Bundle?) {
+        super.onCreate(savedInstanceState)
+        setContentView(R.layout.activity_main)
 
-                <TextView
-                    android:id="@+id/tvStatusTitle"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:text="Check for new system updates"
-                    android:textSize="18sp"
-                    android:textStyle="bold"
-                    android:textColor="?android:attr/textColorPrimary" />
+        tvCurrentVersion = findViewById(R.id.tvCurrentVersion)
+        tvStatusTitle = findViewById(R.id.tvStatusTitle)
+        tvChangelog = findViewById(R.id.tvChangelog)
+        btnAction = findViewById(R.id.btnAction)
+        progressBar = findViewById(R.id.progressBar)
+        cardChangelog = findViewById(R.id.cardChangelog)
 
-                <ProgressBar
-                    android:id="@+id/progressBar"
-                    style="?android:attr/progressBarStyleHorizontal"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:indeterminate="true"
-                    android:visibility="gone"
-                    android:layout_marginTop="16dp" />
-            </LinearLayout>
-        </com.google.android.material.card.MaterialCardView>
+        val installedVer = getProp("ro.galaxyport.version", "0.5")
+        val installedCode = getProp("ro.galaxyport.version_code", "5").toIntOrNull() ?: 5
+        tvCurrentVersion.text = "One UI 8.0 • GalaxyPort v$installedVer (code $installedCode)"
 
-        <!-- Changelog Card (Shows only when update is available) -->
-        <com.google.android.material.card.MaterialCardView
-            android:id="@+id/cardChangelog"
-            android:layout_width="match_parent"
-            android:layout_height="0dp"
-            android:layout_weight="1"
-            android:visibility="gone"
-            app:cardCornerRadius="24dp"
-            app:cardElevation="0dp"
-            app:strokeWidth="1dp"
-            app:strokeColor="#1F888888">
+        btnAction.setOnClickListener {
+            when (btnAction.tag) {
+                "CHECK" -> checkForUpdates()
+                "DOWNLOAD" -> startDownload()
+                "REBOOT" -> tvStatusTitle.text = "Reboot to recovery and flash the zip from Downloads."
+            }
+        }
 
-            <ScrollView
-                android:layout_width="match_parent"
-                android:layout_height="match_parent"
-                android:padding="20dp">
+        ContextCompat.registerReceiver(
+            this,
+            onDownloadComplete,
+            IntentFilter(DownloadManager.ACTION_DOWNLOAD_COMPLETE),
+            ContextCompat.RECEIVER_EXPORTED
+        )
+    }
 
-                <LinearLayout
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:orientation="vertical">
+    override fun onDestroy() {
+        super.onDestroy()
+        try { unregisterReceiver(onDownloadComplete) } catch (_: Exception) {}
+    }
 
-                    <TextView
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:text="What's new"
-                        android:textSize="18sp"
-                        android:textStyle="bold"
-                        android:textColor="?android:attr/textColorPrimary" />
+    private fun checkForUpdates() {
+        progressBar.visibility = View.VISIBLE
+        cardChangelog.visibility = View.GONE
+        tvStatusTitle.text = "Checking for update..."
+        btnAction.isEnabled = false
 
-                    <TextView
-                        android:id="@+id/tvChangelog"
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:layout_marginTop="10dp"
-                        android:textSize="14sp"
-                        android:lineSpacingExtra="4dp"
-                        android:textColor="?android:attr/textColorSecondary" />
-                </LinearLayout>
-            </ScrollView>
-        </com.google.android.material.card.MaterialCardView>
+        Thread {
+            try {
+                val conn = URL(otaUrl).openConnection() as HttpURLConnection
+                conn.connectTimeout = 8000
+                val text = conn.inputStream.bufferedReader().use { it.readText() }
+                val json = JSONObject(text)
+                val remoteCode = json.getInt("versionCode")
+                newVersionName = json.getString("version")
+                val changelog = json.optString("changelog", "No changelog.")
+                downloadUrl = json.getString("url")
 
-        <!-- Spacer if changelog is hidden -->
-        <View
-            android:layout_width="match_parent"
-            android:layout_height="0dp"
-            android:layout_weight="1" />
+                val installedCode = getProp("ro.galaxyport.version_code", "5").toIntOrNull() ?: 5
 
-        <!-- Bottom Pill Action Button (One UI Style) -->
-        <com.google.android.material.button.MaterialButton
-            android:id="@+id/btnAction"
-            android:layout_width="match_parent"
-            android:layout_height="56dp"
-            android:text="Check for update"
-            android:textSize="16sp"
-            android:textStyle="bold"
-            app:cornerRadius="28dp"
-            android:layout_marginBottom="8dp" />
-    </LinearLayout>
-</androidx.coordinatorlayout.widget.CoordinatorLayout>
+                runOnUiThread {
+                    progressBar.visibility = View.GONE
+                    if (remoteCode > installedCode) {
+                        tvChangelog.text = changelog
+                        cardChangelog.visibility = View.VISIBLE
+                        tvStatusTitle.text = "GalaxyPort v$newVersionName is available!"
+                        btnAction.text = "Download"
+                        btnAction.tag = "DOWNLOAD"
+                    } else {
+                        tvStatusTitle.text = "You are on the latest version."
+                        btnAction.text = "Check again"
+                        btnAction.tag = "CHECK"
+                    }
+                    btnAction.isEnabled = true
+                }
+            } catch (e: Exception) {
+                runOnUiThread {
+                    progressBar.visibility = View.GONE
+                    tvStatusTitle.text = "Check failed: ${e.localizedMessage}"
+                    btnAction.text = "Retry"
+                    btnAction.tag = "CHECK"
+                    btnAction.isEnabled = true
+                }
+            }
+        }.start()
+    }
+
+    private fun startDownload() {
+        val url = downloadUrl ?: return
+        progressBar.visibility = View.VISIBLE
+        tvStatusTitle.text = "Downloading update..."
+        btnAction.isEnabled = false
+
+        val request = DownloadManager.Request(Uri.parse(url))
+            .setTitle("GalaxyPort v$newVersionName")
+            .setDescription("Downloading ROM update...")
+            .setNotificationVisibility(DownloadManager.Request.VISIBILITY_VISIBLE_NOTIFY_COMPLETED)
+            .setDestinationInExternalPublicDir(Environment.DIRECTORY_DOWNLOADS, "GalaxyPort-v$newVersionName.zip")
+
+        val dm = getSystemService(Context.DOWNLOAD_SERVICE) as DownloadManager
+        dm.enqueue(request)
+    }
+
+    private val onDownloadComplete = object : BroadcastReceiver() {
+        override fun onReceive(context: Context?, intent: Intent?) {
+            runOnUiThread {
+                progressBar.visibility = View.GONE
+                tvStatusTitle.text = "Download complete!\nSaved to Downloads folder."
+                btnAction.text = "Ready"
+                btnAction.tag = "REBOOT"
+                btnAction.isEnabled = true
+            }
+        }
+    }
+
+    private fun getProp(key: String, def: String): String {
+        return try {
+            val proc = Runtime.getRuntime().exec(arrayOf("getprop", key))
+            BufferedReader(InputStreamReader(proc.inputStream)).readLine()?.trim() ?: def
+        } catch (_: Exception) {
+            def
+        }
+    }
+}
