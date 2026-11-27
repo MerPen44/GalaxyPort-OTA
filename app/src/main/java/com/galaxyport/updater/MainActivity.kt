@@ -22,7 +22,7 @@ import java.net.URL
 
 class MainActivity : AppCompatActivity() {
 
-    private val otaUrl = "https://raw.githubusercontent.com/MerPen44/GalaxyPort-OTA/main/ota.json"
+    private val otaUrl = "https://raw.githubusercontent.com/YOUR_USERNAME/GalaxyPort-OTA/main/ota.json"
     private var downloadUrl: String? = null
     private var newVersionName: String = ""
 
@@ -47,14 +47,15 @@ class MainActivity : AppCompatActivity() {
         cardChangelog = findViewById(R.id.cardChangelog)
 
         val installedVer = getProp("ro.galaxyport.version", "0.5")
-        val installedCode = getProp("ro.galaxyport.version_code", "5").toIntOrNull() ?: 5
-        tvCurrentVersion.text = "One UI 8.0 • GalaxyPort v$installedVer (code $installedCode)"
+        tvCurrentVersion.text = "One UI 8.0 • GalaxyPort v$installedVer"
+
+        checkForUpdates() // Auto check on open like Samsung Settings!
 
         btnAction.setOnClickListener {
             when (btnAction.tag) {
                 "CHECK" -> checkForUpdates()
                 "DOWNLOAD" -> startDownload()
-                "REBOOT" -> tvStatusTitle.text = "Reboot to recovery and flash the zip from Downloads."
+                "REBOOT" -> tvStatusTitle.text = "Reboot to recovery and flash zip from Downloads."
             }
         }
 
@@ -74,7 +75,7 @@ class MainActivity : AppCompatActivity() {
     private fun checkForUpdates() {
         progressBar.visibility = View.VISIBLE
         cardChangelog.visibility = View.GONE
-        tvStatusTitle.text = "Checking for update..."
+        tvStatusTitle.text = "Checking for updates..."
         btnAction.isEnabled = false
 
         Thread {
@@ -95,12 +96,12 @@ class MainActivity : AppCompatActivity() {
                     if (remoteCode > installedCode) {
                         tvChangelog.text = changelog
                         cardChangelog.visibility = View.VISIBLE
-                        tvStatusTitle.text = "GalaxyPort v$newVersionName is available!"
-                        btnAction.text = "Download"
+                        tvStatusTitle.text = "A software update is available.\n\nVersion: GalaxyPort v$newVersionName"
+                        btnAction.text = "Download and install"
                         btnAction.tag = "DOWNLOAD"
                     } else {
-                        tvStatusTitle.text = "You are on the latest version."
-                        btnAction.text = "Check again"
+                        tvStatusTitle.text = "Your software is up to date."
+                        btnAction.text = "Check for updates"
                         btnAction.tag = "CHECK"
                     }
                     btnAction.isEnabled = true
@@ -108,7 +109,7 @@ class MainActivity : AppCompatActivity() {
             } catch (e: Exception) {
                 runOnUiThread {
                     progressBar.visibility = View.GONE
-                    tvStatusTitle.text = "Check failed: ${e.localizedMessage}"
+                    tvStatusTitle.text = "Latest update check failed."
                     btnAction.text = "Retry"
                     btnAction.tag = "CHECK"
                     btnAction.isEnabled = true
@@ -125,7 +126,7 @@ class MainActivity : AppCompatActivity() {
 
         val request = DownloadManager.Request(Uri.parse(url))
             .setTitle("GalaxyPort v$newVersionName")
-            .setDescription("Downloading ROM update...")
+            .setDescription("Downloading update zip...")
             .setNotificationVisibility(DownloadManager.Request.VISIBILITY_VISIBLE_NOTIFY_COMPLETED)
             .setDestinationInExternalPublicDir(Environment.DIRECTORY_DOWNLOADS, "GalaxyPort-v$newVersionName.zip")
 
@@ -137,7 +138,7 @@ class MainActivity : AppCompatActivity() {
         override fun onReceive(context: Context?, intent: Intent?) {
             runOnUiThread {
                 progressBar.visibility = View.GONE
-                tvStatusTitle.text = "Download complete!\nSaved to Downloads folder."
+                tvStatusTitle.text = "Download complete!\nReboot to recovery to install."
                 btnAction.text = "Ready"
                 btnAction.tag = "REBOOT"
                 btnAction.isEnabled = true
