@@ -22,7 +22,7 @@ import java.net.URL
 
 class MainActivity : AppCompatActivity() {
 
-    private val otaUrl = "https://raw.githubusercontent.com/YOUR_USERNAME/GalaxyPort-OTA/main/ota.json"
+    private val otaUrl = "https://raw.githubusercontent.com/MerPen44/GalaxyPort-OTA/main/ota.json"
     private var downloadUrl: String? = null
     private var newVersionName: String = ""
 
