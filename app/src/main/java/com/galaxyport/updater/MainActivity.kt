@@ -26,36 +26,33 @@ class MainActivity : AppCompatActivity() {
     private var downloadUrl: String? = null
     private var newVersionName: String = ""
 
-    private lateinit var tvCurrentVersion: TextView
-    private lateinit var tvStatusTitle: TextView
+    private lateinit var tvSubStatus: TextView
+    private lateinit var tvVersionTag: TextView
     private lateinit var tvChangelog: TextView
     private lateinit var btnAction: Button
     private lateinit var progressBar: ProgressBar
-    private lateinit var cardChangelog: View
-
-    enum class State { IDLE, CHECKING, UP_TO_DATE, UPDATE_AVAILABLE, DOWNLOADING, DOWNLOAD_COMPLETE, ERROR }
+    private lateinit var layoutSplash: View
+    private lateinit var cardUpdate: View
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_main)
 
-        tvCurrentVersion = findViewById(R.id.tvCurrentVersion)
-        tvStatusTitle = findViewById(R.id.tvStatusTitle)
+        tvSubStatus = findViewById(R.id.tvSubStatus)
+        tvVersionTag = findViewById(R.id.tvVersionTag)
         tvChangelog = findViewById(R.id.tvChangelog)
         btnAction = findViewById(R.id.btnAction)
         progressBar = findViewById(R.id.progressBar)
-        cardChangelog = findViewById(R.id.cardChangelog)
+        layoutSplash = findViewById(R.id.layoutSplash)
+        cardUpdate = findViewById(R.id.cardUpdate)
 
-        val installedVer = getProp("ro.galaxyport.version", "0.5")
-        tvCurrentVersion.text = "One UI 8.0 • GalaxyPort v$installedVer"
-
-        checkForUpdates() // Auto check on open like Samsung Settings!
+        checkForUpdates()
 
         btnAction.setOnClickListener {
             when (btnAction.tag) {
                 "CHECK" -> checkForUpdates()
                 "DOWNLOAD" -> startDownload()
-                "REBOOT" -> tvStatusTitle.text = "Reboot to recovery and flash zip from Downloads."
+                "REBOOT" -> tvSubStatus.text = "Reboot to recovery and flash zip from Downloads."
             }
         }
 
@@ -74,8 +71,9 @@ class MainActivity : AppCompatActivity() {
 
     private fun checkForUpdates() {
         progressBar.visibility = View.VISIBLE
-        cardChangelog.visibility = View.GONE
-        tvStatusTitle.text = "Checking for updates..."
+        layoutSplash.visibility = View.VISIBLE
+        cardUpdate.visibility = View.GONE
+        tvSubStatus.text = "Connecting to update server..."
         btnAction.isEnabled = false
 
         Thread {
@@ -86,7 +84,7 @@ class MainActivity : AppCompatActivity() {
                 val json = JSONObject(text)
                 val remoteCode = json.getInt("versionCode")
                 newVersionName = json.getString("version")
-                val changelog = json.optString("changelog", "No changelog.")
+                val changelog = json.optString("changelog", "Bug fixes and performance improvements.")
                 downloadUrl = json.getString("url")
 
                 val installedCode = getProp("ro.galaxyport.version_code", "5").toIntOrNull() ?: 5
@@ -94,13 +92,14 @@ class MainActivity : AppCompatActivity() {
                 runOnUiThread {
                     progressBar.visibility = View.GONE
                     if (remoteCode > installedCode) {
+                        layoutSplash.visibility = View.GONE
+                        tvVersionTag.text = "GalaxyPort v$newVersionName"
                         tvChangelog.text = changelog
-                        cardChangelog.visibility = View.VISIBLE
-                        tvStatusTitle.text = "A software update is available.\n\nVersion: GalaxyPort v$newVersionName"
-                        btnAction.text = "Download and install"
+                        cardUpdate.visibility = View.VISIBLE
+                        btnAction.text = "Download files"
                         btnAction.tag = "DOWNLOAD"
                     } else {
-                        tvStatusTitle.text = "Your software is up to date."
+                        tvSubStatus.text = "You are on the latest version."
                         btnAction.text = "Check for updates"
                         btnAction.tag = "CHECK"
                     }
@@ -109,7 +108,7 @@ class MainActivity : AppCompatActivity() {
             } catch (e: Exception) {
                 runOnUiThread {
                     progressBar.visibility = View.GONE
-                    tvStatusTitle.text = "Latest update check failed."
+                    tvSubStatus.text = "Latest update check failed."
                     btnAction.text = "Retry"
                     btnAction.tag = "CHECK"
                     btnAction.isEnabled = true
@@ -121,7 +120,6 @@ class MainActivity : AppCompatActivity() {
     private fun startDownload() {
         val url = downloadUrl ?: return
         progressBar.visibility = View.VISIBLE
-        tvStatusTitle.text = "Downloading update..."
         btnAction.isEnabled = false
 
         val request = DownloadManager.Request(Uri.parse(url))
@@ -138,8 +136,8 @@ class MainActivity : AppCompatActivity() {
         override fun onReceive(context: Context?, intent: Intent?) {
             runOnUiThread {
                 progressBar.visibility = View.GONE
-                tvStatusTitle.text = "Download complete!\nReboot to recovery to install."
-                btnAction.text = "Ready"
+                tvSubStatus.text = "Download complete!"
+                btnAction.text = "Ready to flash"
                 btnAction.tag = "REBOOT"
                 btnAction.isEnabled = true
             }
