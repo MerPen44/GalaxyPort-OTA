@@ -1,66 +1,93 @@
 <?xml version="1.0" encoding="utf-8"?>
-<androidx.coordinatorlayout.widget.CoordinatorLayout
-    xmlns:android="http://schemas.android.com/apk/res/android"
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
+    android:orientation="vertical"
+    android:padding="20dp"
     android:background="?android:attr/colorBackground">
 
-    <LinearLayout
+    <!-- Header: One UI Software Update Title -->
+    <TextView
         android:layout_width="match_parent"
-        android:layout_height="match_parent"
-        android:orientation="vertical"
-        android:padding="20dp">
+        android:layout_height="wrap_content"
+        android:layout_marginTop="32dp"
+        android:layout_marginBottom="24dp"
+        android:text="Software update"
+        android:textSize="28sp"
+        android:textStyle="bold"
+        android:textColor="?android:attr/textColorPrimary" />
 
-        <!-- Top Header: One UI Large Title -->
+    <!-- Current Version Info Card -->
+    <com.google.android.material.card.MaterialCardView
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        app:cardCornerRadius="20dp"
+        app:cardElevation="0dp"
+        app:strokeWidth="1dp"
+        app:strokeColor="#1F888888"
+        android:layout_marginBottom="16dp">
+
         <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:orientation="vertical"
-            android:paddingTop="36dp"
-            android:paddingBottom="24dp">
+            android:padding="20dp">
 
             <TextView
-                android:id="@+id/tvHeaderTitle"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:text="Software update"
-                android:textSize="32sp"
-                android:textStyle="bold"
-                android:textColor="?android:attr/textColorPrimary" />
+                android:text="Current version"
+                android:textSize="13sp"
+                android:textColor="?android:attr/textColorSecondary" />
 
             <TextView
                 android:id="@+id/tvCurrentVersion"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="4dp"
-                android:text="One UI 8.0 • GalaxyPort"
-                android:textSize="15sp"
+                android:text="One UI 8.0 • GalaxyPort v0.5"
+                android:textSize="16sp"
+                android:textStyle="bold"
+                android:textColor="?android:attr/textColorPrimary" />
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="8dp"
+                android:text="Security patch level: October 1, 2026"
+                android:textSize="13sp"
                 android:textColor="?android:attr/textColorSecondary" />
         </LinearLayout>
+    </com.google.android.material.card.MaterialCardView>
 
-        <!-- Main Card: Status Container -->
-        <com.google.android.material.card.MaterialCardView
+    <!-- Update Status Card (Mimics Samsung Update Screen) -->
+    <com.google.android.material.card.MaterialCardView
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1"
+        app:cardCornerRadius="20dp"
+        app:cardElevation="0dp"
+        app:strokeWidth="1dp"
+        app:strokeColor="#1F888888"
+        android:layout_marginBottom="16dp">
+
+        <ScrollView
             android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            app:cardCornerRadius="24dp"
-            app:cardElevation="0dp"
-            app:strokeWidth="1dp"
-            app:strokeColor="#1F888888"
-            android:layout_marginBottom="16dp">
+            android:layout_height="match_parent"
+            android:padding="20dp">
 
             <LinearLayout
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:orientation="vertical"
-                android:padding="20dp">
+                android:orientation="vertical">
 
                 <TextView
                     android:id="@+id/tvStatusTitle"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:text="Check for new system updates"
-                    android:textSize="18sp"
+                    android:text="Checking for updates..."
+                    android:textSize="16sp"
                     android:textStyle="bold"
                     android:textColor="?android:attr/textColorPrimary" />
 
@@ -70,38 +97,28 @@
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     android:indeterminate="true"
-                    android:visibility="gone"
                     android:layout_marginTop="16dp" />
-            </LinearLayout>
-        </com.google.android.material.card.MaterialCardView>
 
-        <!-- Changelog Card (Shows only when update is available) -->
-        <com.google.android.material.card.MaterialCardView
-            android:id="@+id/cardChangelog"
-            android:layout_width="match_parent"
-            android:layout_height="0dp"
-            android:layout_weight="1"
-            android:visibility="gone"
-            app:cardCornerRadius="24dp"
-            app:cardElevation="0dp"
-            app:strokeWidth="1dp"
-            app:strokeColor="#1F888888">
-
-            <ScrollView
-                android:layout_width="match_parent"
-                android:layout_height="match_parent"
-                android:padding="20dp">
-
+                <!-- Changelog Section -->
                 <LinearLayout
+                    android:id="@+id/cardChangelog"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:orientation="vertical">
+                    android:orientation="vertical"
+                    android:visibility="gone"
+                    android:layout_marginTop="16dp">
+
+                    <View
+                        android:layout_width="match_parent"
+                        android:layout_height="1dp"
+                        android:background="#1F888888"
+                        android:layout_marginBottom="16dp" />
 
                     <TextView
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
                         android:text="What's new"
-                        android:textSize="18sp"
+                        android:textSize="15sp"
                         android:textStyle="bold"
                         android:textColor="?android:attr/textColorPrimary" />
 
@@ -109,29 +126,25 @@
                         android:id="@+id/tvChangelog"
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
-                        android:layout_marginTop="10dp"
+                        android:layout_marginTop="8dp"
                         android:textSize="14sp"
                         android:lineSpacingExtra="4dp"
                         android:textColor="?android:attr/textColorSecondary" />
                 </LinearLayout>
-            </ScrollView>
-        </com.google.android.material.card.MaterialCardView>
 
-        <!-- Spacer if changelog is hidden -->
-        <View
-            android:layout_width="match_parent"
-            android:layout_height="0dp"
-            android:layout_weight="1" />
+            </LinearLayout>
+        </ScrollView>
+    </com.google.android.material.card.MaterialCardView>
 
-        <!-- Bottom Pill Action Button (One UI Style) -->
-        <com.google.android.material.button.MaterialButton
-            android:id="@+id/btnAction"
-            android:layout_width="match_parent"
-            android:layout_height="56dp"
-            android:text="Check for update"
-            android:textSize="16sp"
-            android:textStyle="bold"
-            app:cornerRadius="28dp"
-            android:layout_marginBottom="8dp" />
-    </LinearLayout>
-</androidx.coordinatorlayout.widget.CoordinatorLayout>
+    <!-- One UI Bottom Pill Button ("Download and install") -->
+    <com.google.android.material.button.MaterialButton
+        android:id="@+id/btnAction"
+        android:layout_width="match_parent"
+        android:layout_height="56dp"
+        android:text="Check for updates"
+        android:textSize="16sp"
+        android:textStyle="bold"
+        app:cornerRadius="28dp"
+        android:layout_marginBottom="8dp" />
+
+</LinearLayout>
