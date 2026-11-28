@@ -257,7 +257,7 @@ class MainActivity : AppCompatActivity() {
         val url = downloadUrl ?: return
         crossfade(cardUpdate, layoutSplash)
         progressBar.visibility = View.VISIBLE
-        tvSubStatus.text = "Downloading GalaxyPort v$newVersionName..."
+        tvSubStatus.text = "Downloading update..."
         btnAction.isEnabled = false
 
         val request = DownloadManager.Request(Uri.parse(url))
