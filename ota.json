@@ -1,7 +1,7 @@
 {
-  "version": "TEST FILE",
-  "versionCode": 6,
-  "url": "https://drive.google.com/file/d/1hzpHc1y2awIXe8_liu2cIeQLC6Od2VAW/view?usp=sharing",
+  "version": "Beta 4",
+  "versionCode": 5,
+  "url":"none",
   "sha256": "",
-  "changelog": "This is a test file for the upcoming GalaxyPort Updater, Do not download and DO NOT FLASH! its an empty text file"
+  "changelog": "none"
 }
